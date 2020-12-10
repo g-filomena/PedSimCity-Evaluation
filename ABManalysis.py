@@ -700,23 +700,21 @@ def _find_local_landmarks(node_geometry, buildings_gdf, buildings_gdf_sindex, ra
     
     return list_local
     
-    
-    
-    
-def regionBased_route_stats(edgeIDs, route_geometry, nodes_gdf, edges_gdf):
+       
+def regionBased_variables(edgeIDs, route_geometry, nodes_gdf, edges_gdf):
     """
-    This function generate a translated table that can be used for statistical tests (e.g. Anova, Games-Howell test), for each passed route choice model.
-     
+    This function computes a set of variables for a certain ABM route, given the sequence of semgnets traversed and its geometry.
+    It returns the portion walked along pedestrian streets, major roads, natural barriers, nr of regions traversed.
     Parameters
     ----------
-    routes_gdf_list: List of GeoDataFrames
-        A list contianing a GeoDataFrame of routes per each route choice model
-    route_choice_models: List of String
-        The list of the abbreviation of the route choice models for which the statistics are desired
-    labels: List of String
-        The labels of the variables on which the statistics should be computed.
-    titles: List of String
-        The titles of the variables investigated (for visualisation purposes).
+    edgeIDs: List of Integer
+        The sequence of edgeIDs (segments) traversed by the route
+    route_geometry: LineString or MultiLineString geometry
+        The route's geometry
+    nodes_gdf: Point GeoDataFrame
+        The GeoDataFrame of the nodes of a street network
+    edges_gdf: LineString GeoDataFrame
+        The GeoDataFrame of the edges of a street network
     
     Returns
     -------
@@ -733,23 +731,68 @@ def regionBased_route_stats(edgeIDs, route_geometry, nodes_gdf, edges_gdf):
             d = nodes_gdf.loc[u].district 
             districts[d] = round(districts.get(d, 0) + length, 2)
     
-    pedestrian_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['pedestrian'] == 1)]['length'].sum()/route_geometry.length
-    major_roads_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['highway'] == 'primary')]['length'].sum()/route_geometry.length
-    p_barrier_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['p_bool'] == 1)]['length'].sum()/route_geometry.length  
-    return pedestrian_length, major_roads_length, p_barrier_length, districts
+    pedestrian_portion = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['pedestrian'] == 1)]['length'].sum()/route_geometry.length
+    major_roads_portion = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['highway'] == 'primary')]['length'].sum()/route_geometry.length
+    naturale_barriers_portion = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['p_bool'] == 1)]['length'].sum()/route_geometry.length  
+    return pedestrian_portion, major_roads_portion, naturale_barriers_portion, districts
+
+def count_regions(row, nodes_gdf):
+    """
+    This function counts the number of regions crossed along a route.
+     
+    Parameters
+    ----------
+    row: GeoDataFrames Series
+        The row of a GeoDataFrames containing routes generated in the ABM
+    nodes_gdf: Point GeoDataFrame
+        The GeoDataFrame of the nodes of a street network
+
     
-def portion_region(row, nodes, which = 'first'):
+    Returns
+    -------
+    Pandas DataFrame
+    """  
 
-
-def count_regions(row, nodes):
     count = 0
-    if not nodes.loc[int(row['O'])].district in row['districts']:
+    if not nodes_gdf.loc[row.O].district in row['districts']:
         count += 1
-    if not nodes.loc[int(row['D'])].district in row['districts']:
+    if not nodes_gdf.loc[row.D].district in row['districts']:
         count +=1
     return len(row['districts']) + count
     
  def generate_ax_hcolorbar(cmap, fig, ax, nrows, ncols, text_color, font_size, norm = None, ticks = 5, symbol = False):
+ 
+     """
+    This function generates horizontal colorbars for a grid of subplots.
+    
+    Parameters
+    ----------
+    cmap: String, Colormap instance
+        The used color map 
+    fig: Figure
+        The Figure object
+    ax: AxesSubplot
+        A subplot axes of the grid
+    nrows: Integer
+        The number of rows
+    ncols: Integer
+        The number of columns
+    text_color: String, Array, etc.
+        The color of the text
+    font_size: Integer
+        The font size
+    norm: matplotlib.colors.Normalize instance
+        Array of normalised data, if applies
+    ticks: Integer
+        The number of ticks along the bar
+    symbol: boolean
+        If True shows the ">" symbol instead of the max bound (e.g. when normalising)
+        
+    
+    Returns
+    -------
+    Pandas DataFrame
+    """    
     
     if font_size is None: 
         font_size = 20
