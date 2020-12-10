@@ -4,6 +4,8 @@ import math
 from shapely.geometry import*
 from shapely.ops import*
 import ast
+import matplotlib.ticker as ticker
+import matplotlib.pyplot as plt
 
 def aggregate_runs(df_list, route_choice_models, edges_gdf, ddof = 0):
     """
@@ -697,3 +699,81 @@ def _find_local_landmarks(node_geometry, buildings_gdf, buildings_gdf_sindex, ra
         list_scores = precise_matches["lScore_sc"].tolist()
     
     return list_local
+    
+    
+    
+    
+def regionBased_route_stats(edgeIDs, route_geometry, nodes_gdf, edges_gdf):
+    """
+    This function generate a translated table that can be used for statistical tests (e.g. Anova, Games-Howell test), for each passed route choice model.
+     
+    Parameters
+    ----------
+    routes_gdf_list: List of GeoDataFrames
+        A list contianing a GeoDataFrame of routes per each route choice model
+    route_choice_models: List of String
+        The list of the abbreviation of the route choice models for which the statistics are desired
+    labels: List of String
+        The labels of the variables on which the statistics should be computed.
+    titles: List of String
+        The titles of the variables investigated (for visualisation purposes).
+    
+    Returns
+    -------
+    Pandas DataFrame
+    """    
+    
+    districts = {}
+    for edgeID in edgeIDs:
+        edgeID = int(edgeID)
+        u = edges_gdf.loc[edgeID].u
+        v = edges_gdf.loc[edgeID].v
+        length = edges_gdf.loc[edgeID].geometry.length
+        if nodes_gdf.loc[u].district == nodes_gdf.loc[v].district:
+            d = nodes_gdf.loc[u].district 
+            districts[d] = round(districts.get(d, 0) + length, 2)
+    
+    pedestrian_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['pedestrian'] == 1)]['length'].sum()/route_geometry.length
+    major_roads_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['highway'] == 'primary')]['length'].sum()/route_geometry.length
+    p_barrier_length = edges_gdf[(edges_gdf.edgeID.isin(edgeIDs)) & (edges_gdf['p_bool'] == 1)]['length'].sum()/route_geometry.length  
+    return pedestrian_length, major_roads_length, p_barrier_length, districts
+    
+def portion_region(row, nodes, which = 'first'):
+
+
+def count_regions(row, nodes):
+    count = 0
+    if not nodes.loc[int(row['O'])].district in row['districts']:
+        count += 1
+    if not nodes.loc[int(row['D'])].district in row['districts']:
+        count +=1
+    return len(row['districts']) + count
+    
+ def generate_ax_hcolorbar(cmap, fig, ax, nrows, ncols, text_color, font_size, norm = None, ticks = 5, symbol = False):
+    
+    if font_size is None: 
+        font_size = 20
+    
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm._A = []
+    vr_p = 1/30.30
+    hr_p = 0.5/30.30
+    
+    width = ax.get_position().width
+    x = ax.get_position().x0
+    y = ax.get_position().y0 - 0.070
+    height = 0.025
+    pos = [x, y, width, height]
+    cax = fig.add_axes(pos, frameon = False)
+    cax.tick_params(size=0)
+    cb = plt.colorbar(sm, cax=cax, orientation='horizontal')
+    tick_locator = ticker.MaxNLocator(nbins=ticks)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    cb.outline.set_visible(False)
+     
+    if symbol: cax.set_xticklabels([round(t,1) if t < norm.vmax else "> "+str(round(t,1)) for t in cax.get_xticks()])
+    else: cax.set_xticklabels([round(t,1) for t in cax.get_xticks()])
+    
+    plt.setp(plt.getp(cax.axes, "xticklabels"), size = 0, color = text_color, fontfamily = 'Times New Roman', 
+             fontsize=(font_size-font_size*0.33))
