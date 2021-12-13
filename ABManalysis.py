@@ -6,6 +6,7 @@ from shapely.ops import*
 import ast
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
+import copy
 
 def aggregate_runs(df_list, route_choice_models, edges_gdf, ddof = 0):
     """
@@ -112,15 +113,24 @@ def compute_deviation_from(edges_gdf, route_choice_models, comparison, max_err):
             
             diff = median-edges_gdf.loc[row[0]][comparison]
 
-            if (median == 0) & (stdv == 0) & (edges_gdf.loc[row[0]][comparison] == 0): std_err = 0
-            elif (stdv == 0) & (diff > 0): std_err = max_err
-            elif (stdv == 0) & (diff < 0): std_err = -max_err
-            elif (stdv == 0) & (diff == 0): std_err = 0
-            else: std_err = diff/stdv
+            if (median == 0) & (stdv == 0) & (edges_gdf.loc[row[0]][comparison] == 0): 
+                std_err = 0
+            elif (stdv == 0) & (diff > 0): 
+                std_err = max_err
+            elif (stdv == 0) & (diff < 0): 
+                std_err = -max_err
+            elif (stdv == 0) & (diff == 0):
+                std_err = 0
+            else: 
+                std_err = diff/stdv
 
             # set columns
+
             edges_gdf.at[row[0], column+'_std_err'] = std_err
             edges_gdf.at[row[0], column+'_diff'] = abs(diff)
+        
+        edges_gdf[column+'_std_err'].replace(np.inf, max_err, inplace = True)
+        edges_gdf[column+'_std_err'].replace(-np.inf, -max_err, inplace = True)
         
     return edges_gdf
 
@@ -760,9 +770,8 @@ def count_regions(row, nodes_gdf):
         count +=1
     return len(row['districts']) + count
     
- def generate_ax_hcolorbar(cmap, fig, ax, nrows, ncols, text_color, font_size, norm = None, ticks = 5, symbol = False):
- 
-     """
+def generate_ax_hcolorbar(cmap, fig, ax, nrows, ncols, text_color, font_size, norm = None, ticks = 5, symbol = False):
+    """
     This function generates horizontal colorbars for a grid of subplots.
     
     Parameters
@@ -815,8 +824,186 @@ def count_regions(row, nodes_gdf):
     cb.update_ticks()
     cb.outline.set_visible(False)
      
-    if symbol: cax.set_xticklabels([round(t,1) if t < norm.vmax else "> "+str(round(t,1)) for t in cax.get_xticks()])
-    else: cax.set_xticklabels([round(t,1) for t in cax.get_xticks()])
+    if symbol: 
+        cax.set_xticklabels([round(t,1) if t < norm.vmax else "> "+str(round(t,1)) for t in cax.get_xticks()])
+    else: 
+        cax.set_xticklabels([round(t,1) for t in cax.get_xticks()])
     
     plt.setp(plt.getp(cax.axes, "xticklabels"), size = 0, color = text_color, fontfamily = 'Times New Roman', 
              fontsize=(font_size-font_size*0.33))
+             
+             
+def set_routes_stats(summary_responses, survey_routes, videos):
+
+    route_variables = ['onlyDistance', 'onlyAngular', 'distanceHeuristic', 'angularHeuristic', 'regions', 'routeMarks', 
+                       'barriers', 'distantLandmarks', 'usingElements', 'noElements']
+    admitted = ['DS', 'DL', 'DG', 'DB', 'DR', 'AC',  'AL', 'AG', 'AB', 'AR']  
+    
+    routes_stats = pd.DataFrame(index = summary_responses['id'], columns = route_variables )
+
+    
+    def _route_composition(index):
+
+        routes = []
+        complementary_routes = []
+        
+        total_length = 0.0
+        total_minimisation_length = 0.0
+        total_elements_length = 0.0
+        
+        for video in videos:
+            route_composition = dict((rC, 0.0) for rC in route_variables)
+            
+            sections = summary_responses.loc[index][video][summary_responses.loc[index][video] != 0].index.values
+            traversed_sections = survey_routes[survey_routes.video.isin(sections)]
+            route_length = traversed_sections.length.sum()
+            total_length += route_length
+            minimisation_length = 0.0
+            elements_length = 0.0
+            overlap_sub_goals = 0.0
+            
+            route_models_all = traversed_sections.routeChoice
+            route_models_tmp = list(set([item for sublist in route_models_all for item in sublist]))
+            if 'not' in route_models_tmp:
+                route_models_tmp.remove('not')
+            route_models = list(set([item for item in route_models_tmp if item in admitted]))
+            
+            for row in traversed_sections.itertuples():
+                
+                length_section = traversed_sections.loc[row.Index].length
+                rC_section = traversed_sections.loc[row.Index].routeChoice
+                minimisation = False
+                
+                if any('D' in rc_model for rc_model in rC_section): 
+                    if any('DS' in rc_model for rc_model in rC_section): 
+                        minimisation = True
+                        route_composition['onlyDistance'] += length_section
+                    if any('D' in rc_model for rc_model in rC_section if rc_model != 'DS'): 
+                        route_composition['distanceHeuristic'] += length_section   
+                
+                if any('A' in rc_model for rc_model in rC_section): 
+                    if any('AC' in rc_model for rc_model in rC_section): 
+                        minimisation = True
+                        route_composition['onlyAngular'] += length_section
+                    if any('A' in rc_model for rc_model in rC_section if rc_model != 'AC'):  
+                        route_composition['angularHeuristic'] += length_section
+                
+                if minimisation:
+                    minimisation_length += length_section
+                
+                elements = False
+                if any('R' in rc_model for rc_model in rC_section): 
+                    route_composition['regions'] += length_section
+                    elements = True
+                if any('G' in rc_model for rc_model in rC_section): 
+                    route_composition['distantLandmarks'] += length_section
+                    elements = True
+                if any('B' in rc_model for rc_model in rC_section):
+                    route_composition['barriers'] += length_section  
+                    elements = True
+                if any('L' in rc_model for rc_model in rC_section): 
+                    route_composition['routeMarks'] += length_section   
+                    elements = True 
+                if (any('B' in rc_model for rc_model in rC_section)) & (any('L' in rc_model for rc_model in rC_section)):
+                    overlap_sub_goals += length_section
+                
+                if elements:
+                    elements_length += length_section
+                    
+            R = route_composition['onlyDistance']
+            A = route_composition['onlyAngular']
+            S = R+A
+            if S == 0.0:
+                route_composition['onlyDistance'] = 0.5
+                route_composition['onlyAngular'] = 0.5
+            else:
+                route_composition['onlyDistance'] = float("{0:.3f}".format(R/S))
+                route_composition['onlyAngular'] = float("{0:.3f}".format(A/S))
+            
+            R = route_composition['regions']
+            O = route_composition['routeMarks'] - (overlap_sub_goals/2)
+            B = route_composition['barriers'] - (overlap_sub_goals/2)
+            D = route_composition['distantLandmarks']
+            LR = route_composition['distanceHeuristic']
+            LA = route_composition['angularHeuristic']
+            E = elements_length
+
+            route_composition['regions'] = float("{0:.3f}".format(R/E))
+            route_composition['routeMarks'] = float("{0:.3f}".format(O/E))
+            route_composition['barriers'] = float("{0:.3f}".format(B/E))
+            route_composition['distantLandmarks'] = float("{0:.3f}".format(D/E))
+            route_composition['distanceHeuristic'] = float("{0:.3f}".format(LR/(LR+LA)))
+            route_composition['angularHeuristic'] = float("{0:.3f}".format(LA/(LR+LA)))
+
+            C = minimisation_length
+
+            route_composition['noElements'] = C/(E+C)
+            route_composition['usingElements'] = E/(E+C)
+            
+            total_minimisation_length += minimisation_length
+            total_elements_length += elements_length
+            routes.append(route_composition)
+
+        final_composition = dict((rC, 0.0) for rC in route_variables) 
+        for key,_ in final_composition.items():
+            final_composition[key] = float("{0:.3f}".format((routes[0][key]+routes[1][key]+routes[2][key])/3))
+            subject = summary_responses.loc[index]['id']
+            routes_stats.at[subject, key] = final_composition[key]
+                  
+        routes_stats.at[subject, "length"] = total_length
+        routes_stats.at[subject, "combined_length"] = total_elements_length
+        routes_stats.at[subject, "minimisation_length"] = total_minimisation_length
+        
+    for row in summary_responses.itertuples():
+        _route_composition(row.Index)
+    
+    return routes_stats
+                
+    
+def compute_duration(startime, endtime):
+
+    start = int(startime[:2])*60 + int(startime[3:5])
+    end = int(endtime[:2])*60+ int(endtime[3:5])
+    if end < start:
+        end += (24*60)
+        
+    return end-start
+    
+# def with variable object of interest
+def standardisation(df):
+    df = df.copy()
+    for column in df.columns:
+        df[column+"_std"] = (df[column]-df[column].mean())/df[column].std()
+    
+    for column in df.columns:
+        if 'std' in column: 
+            continue
+        df.drop(column, axis = 1, inplace = True)
+    return df
+
+def log_transf(df):
+    
+    df = df.copy()
+    for column in df.columns:
+        df[column+"_log"] = np.log(df[column])
+        n = 1
+        while (df[column+"_log"].nsmallest(n).iloc[-1] == -np.inf):
+            n+=1
+        df[column+"_log"].replace(-np.inf, df[column+"_log"].nsmallest(n).iloc[-1], inplace = True)
+        
+        n = 1
+        while (df[column+"_log"].nlargest(n).iloc[-1] == np.inf):
+            n+=1
+        df[column+"_log"].replace(np.inf, df[column+"_log"].nlargest(n).iloc[-1], inplace = True)
+    
+    for column in df.columns:
+        if 'log' in column: 
+            continue
+        df.drop(column, axis = 1, inplace = True)
+    return df
+
+def standardise_column(df, column):
+
+    series = (df[column]-df[column].mean())/df[column].std()
+    
+    return series
