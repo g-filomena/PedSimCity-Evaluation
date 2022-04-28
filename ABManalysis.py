@@ -840,7 +840,6 @@ def set_routes_stats(summary_responses, survey_routes, videos):
     admitted = ['DS', 'DL', 'DG', 'DB', 'DR', 'AC',  'AL', 'AG', 'AB', 'AR']  
     
     routes_stats = pd.DataFrame(index = summary_responses['id'], columns = route_variables )
-
     
     def _route_composition(index):
 
@@ -890,7 +889,7 @@ def set_routes_stats(summary_responses, survey_routes, videos):
                         route_composition['angularHeuristic'] += length_section
                 
                 if minimisation:
-                    G += length_section
+                    minimisation_length += length_section
                 
                 elements = False
                 if any('R' in rc_model for rc_model in rC_section): 
@@ -913,14 +912,15 @@ def set_routes_stats(summary_responses, survey_routes, videos):
                     
             D = route_composition['onlyDistance']
             A = route_composition['onlyAngular']
-            M = D + A # not allowing for overlaps
-            
+            M = minimisation_length # possible overlaps included as this is only used to derive 'noElements' vs 'usingElements'
+
             if M == 0.0:
                 route_composition['onlyDistance'] = 0.5
                 route_composition['onlyAngular'] = 0.5
             else:
-                route_composition['onlyDistance'] = float("{0:.3f}".format(D/M))
-                route_composition['onlyAngular'] = float("{0:.3f}".format(A/M))
+                S = D+A # here excluding overlaps
+                route_composition['onlyDistance'] = float("{0:.3f}".format(D/S))
+                route_composition['onlyAngular'] = float("{0:.3f}".format(A/S))
             
             R = route_composition['regions']
             O = route_composition['routeMarks'] - (overlap_sub_goals/2)
@@ -934,10 +934,9 @@ def set_routes_stats(summary_responses, survey_routes, videos):
             route_composition['routeMarks'] = float("{0:.3f}".format(O/E))
             route_composition['barriers'] = float("{0:.3f}".format(B/E))
             route_composition['distantLandmarks'] = float("{0:.3f}".format(DL/E))
-            
             route_composition['distanceHeuristic'] = float("{0:.3f}".format(LR/(LR+LA)))
             route_composition['angularHeuristic'] = float("{0:.3f}".format(LA/(LR+LA)))
-
+            
             route_composition['noElements'] = M/(E+M)
             route_composition['usingElements'] = E/(E+M)
             
