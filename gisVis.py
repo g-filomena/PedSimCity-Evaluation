@@ -5,6 +5,7 @@ import matplotlib.cm as cm
 import matplotlib.colors as cols
 import matplotlib.patches as mpatches
 import matplotlib.ticker as ticker
+import colorsys
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable, ImageGrid
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
@@ -12,13 +13,7 @@ from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 import mapclassify, pylab, colorsys
 pd.set_option("display.precision", 3)
 
-"""
-Plotting functions
-
-"""
-
-## Plotting
-    
+   
 class Plot():
     
     def __init__(self, figsize, black_background, title):
@@ -91,7 +86,7 @@ def _single_plot(ax, gdf, column = None, scheme = None, bins = None, classes = 7
     bins: list
         bins defined by the user
     classes: int
-        classes for visualising when scheme is not "None"
+        classes when scheme is not "None"
     norm: array
         a class that specifies a desired data normalisation into a [min, max] interval
     cmap: string, matplotlib.colors.LinearSegmentedColormap
@@ -101,19 +96,14 @@ def _single_plot(ax, gdf, column = None, scheme = None, bins = None, classes = 7
     alpha: float
         alpha value of the plotted layer
     legend: boolean
-        if True, show legend, otherwise don't
+        if True, it shows the legend
     geometry_size: float
-        point size value, when plotting a Point GeoDataFrame
-    geometry_size_factor: float 
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the marker size 
-        accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a Point GeoDataFrame
-    geometry_size: float
-        line width, when plotting a LineString GeoDataFrame
+        markersize, when plotting a Point GeoDataFrame or linewidth when plotting a LineString GeoDataFrame
+    geometry_size_column: string 
+        name of the columnn, if any, of the GeoDataFrame whose values are to regulate the size of the geometries
     geometry_size_factor: float
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the line width 
-        accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a LineString GeoDataFrame
+        to control to what extent the values of the geometry_size_column impact the geometry_size
+        For a Point GeoDataFrame, it rescales the geometry_size_column provided from 0 to 1 and applies the factor (e.g. rescaled variable's value [0-1] * factor).
     zorder: int   
         zorder of this layer; e.g. if 0, plots first, thus main GeoDataFrame on top; if 1, plots last, thus on top.
     """  
@@ -129,13 +119,10 @@ def _single_plot(ax, gdf, column = None, scheme = None, bins = None, classes = 7
         cmap = rand_cmap(len(gdf[column].unique()))         
     
     if (norm is not None) | (scheme is not None):
-        legend = False
         categorical = False
         color = None
         if cmap is None:
             cmap = kindlmann()
-        if norm is not None:
-            scheme = None
         
     if (column is not None) & (not categorical):
         if(gdf[column].dtype == 'O'):
@@ -216,21 +203,18 @@ def plot_gdf(gdf, column = None, title = None, black_background = True, figsize 
     cbar_max_symbol: boolean
         if True, it shows the ">" next to the highest tick's label in the colorbar (useful when normalising)
     cbar_min_max: boolean
-        if True, it only shows the ">" and "<" as labels of the lowest and highest ticks' the colorbar
+        if True, it only shows the labels of the lowest and highest ticks of the colorbar
+    cbar_shrink: float
+        fraction by which to multiply the size of the colorbar
     axes_frame: boolean
         if True, it shows the axes' frame
     geometry_size: float
-        point size value, when plotting a Point GeoDataFrame
-    geometry_size_factor: float 
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the marker size 
-        accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a Point GeoDataFrame
-    geometry_size: float
-        line width, when plotting a LineString GeoDataFrame
+        markersize, when plotting a Point GeoDataFrame or linewidth when plotting a LineString GeoDataFrame
+    geometry_size_column: string 
+        name of the columnn, if any, of the GeoDataFrame whose values are to regulate the size of the geometries
     geometry_size_factor: float
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the line width 
-        accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a LineString GeoDataFrame
+        to control to what extent the values of the geometry_size_column impact the geometry_size
+        For a Point GeoDataFrame, it rescales the geometry_size_column provided from 0 to 1 and applies the factor (e.g. rescaled variable's value [0-1] * factor).
     base_map_gdf: GeoDataFrame
         a desired additional layer to use as a base map        
     base_map_color: string
@@ -239,8 +223,7 @@ def plot_gdf(gdf, column = None, title = None, black_background = True, figsize 
         base map's alpha value
     base_map_geometry_size: float
         base map's marker size when the base map is a Point GeoDataFrame
-    base_map_geometry_size: float
-        base map's line width when the base map is a LineString GeoDataFrame
+
     base_map_zorder: int   
         zorder of the layer; e.g. if 0, plots first, thus main GeoDataFrame on top; if 1, plots last, thus on top.
         
@@ -267,26 +250,27 @@ def plot_gdf(gdf, column = None, title = None, black_background = True, figsize 
    
     if geometry_size_column is None:
         geometry_size_column = column
+    
     _single_plot(ax, gdf, column = column, scheme = scheme, bins = bins, classes = classes, norm = norm, cmap = cmap, color = color, alpha = alpha, 
                 geometry_size = geometry_size, geometry_size_column = geometry_size_column, geometry_size_factor = geometry_size_factor, 
                 zorder = zorder, legend = legend)
 
     if legend: 
-        _generate_legend_fig(plot, ax, black_background) 
+        _generate_legend(plot, ax, black_background) 
     elif cbar:
         if norm is None:
             min_value = gdf[column].min()
             max_value = gdf[column].max()
             norm = plt.Normalize(vmin = min_value, vmax = max_value)
             
-        _set_colorbar(plot, cmap, norm = norm, ticks = cbar_ticks, symbol = cbar_max_symbol, min_max = cbar_min_max, shrinkage = cbar_shrinkage)
+        _generate_colorbar(plot, cmap, norm = norm, ticks = cbar_ticks, symbol = cbar_max_symbol, min_max = cbar_min_max, shrinkage = cbar_shrinkage)
     
     return fig    
                       
 def plot_gdfs(list_gdfs = [], column = None, ncols = 2, main_title = None, titles = [], black_background = True, figsize = (15,30), scheme = None, 
                 bins = None, classes = None, norm = None, cmap = None, color = None, alpha = None, legend = False, cbar = False, 
                 cbar_ticks = 5, cbar_max_symbol = False, cbar_min_max = False, cbar_shrinkage = 0.75, axes_frame = False, 
-                geometry_size = None, geometry_size_columns = [], geometry_size_factor = None): 
+                geometry_size = None, geometry_size_column = None, geometry_size_factor = None): 
                      
     """
     It plots the geometries of a list of GeoDataFrame, containing the same type of geometry. Coloring is based on a provided column (that needs to 
@@ -331,21 +315,18 @@ def plot_gdfs(list_gdfs = [], column = None, ncols = 2, main_title = None, title
     cbar_max_symbol: boolean
         if True, it shows the ">" next to the highest tick's label in the colorbar (useful when normalising)
     cbar_min_max: boolean
-        if True, it only shows the ">" and "<" as labels of the lowest and highest ticks' the colorbar
-    cbar_shrinkage: float
-        if True, it only shows the ">" and "<" as labels of the lowest and highest ticks' the colorbar
+        if True, it only shows the labels of the lowest and highest ticks of the colorbar
+    cbar_shrink: float
+        fraction by which to multiply the size of the colorbar
     axes_frame: boolean
         if True, it shows the axes' frame
     geometry_size: float
-        point size value, when plotting a Point GeoDataFrame
-    geometry_size_column: float 
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the marker 
-        size accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a Point GeoDataFrame    
-    geometry_size_factor: float 
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the marker 
-        size accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a Point GeoDataFrame
+        markersize, when plotting a Point GeoDataFrame or linewidth when plotting a LineString GeoDataFrame
+    geometry_size_column: string 
+        name of the columnn, if any, of the GeoDataFrame whose values are to regulate the size of the geometries
+    geometry_size_factor: float
+        to control to what extent the values of the geometry_size_column impact the geometry_size
+        For a Point GeoDataFrame, it rescales the geometry_size_column provided from 0 to 1 and applies the factor (e.g. rescaled variable's value [0-1] * factor).
         
     
     Returns
@@ -367,7 +348,6 @@ def plot_gdfs(list_gdfs = [], column = None, ncols = 2, main_title = None, title
                           title = main_title)
     
     fig, grid = multiPlot.fig, multiPlot.grid   
-    legend_fig, legend_ax = False, False
     
     if nrows > 1: 
         grid = [item for sublist in grid for item in sublist]
@@ -382,7 +362,8 @@ def plot_gdfs(list_gdfs = [], column = None, ncols = 2, main_title = None, title
         axes = [item for sublist in grid for item in sublist]
     else:
         axes = grid
-        
+    
+    legend_ax = False
     for n, ax in enumerate(axes):
         _set_axes_frame(axes_frame, ax, black_background, multiPlot.text_color)    
         ax.set_aspect("equal")
@@ -391,35 +372,29 @@ def plot_gdfs(list_gdfs = [], column = None, ncols = 2, main_title = None, title
         
         gdf = list_gdfs[n]
         if len(titles) > 0:
-            ax.set_title(titles[n], loc='center', fontfamily = 'Times New Roman', fontsize = multiPlot.font_size_primary, color = multiPlot.text_color,  
-            pad = 15)
-            
-        if (n == ncols*nrows/2) & legend & single_legend:
-            legend_ax = True
-            legend_fig = True
-        elif legend & (not single_legend):
-            legend_ax = True
-        
+            ax.set_title(titles[n], loc='center', fontfamily = 'Times New Roman', fontsize = multiPlot.font_size_primary, color = multiPlot.text_color, pad = 15)
+                   
         geometry_size_column = column
         if geometry_size_columns != []:
             geometry_size_column = geometry_size_columns[n]
+        
+        if (legend) & (ax == axes[-1]):
+            legend_ax = True
+        
         _single_plot(ax, gdf, column = column, scheme = scheme, bins = bins, classes = classes, norm = norm, cmap = cmap, color = color, 
                     alpha = alpha, legend = legend_ax, geometry_size = geometry_size, geometry_size_column = geometry_size_column, 
                     geometry_size_factor = geometry_size_factor)
                     
-        if legend_fig:
-            _generate_legend_ax(multiPlot, ax, black_background)
-        elif legend_ax:
-            _generate_legend_ax(multiPlot, ax, black_background)
-    
-    if cbar:
+    if legend:
+        _generate_legend(multiPlot, ax, black_background)
+    elif cbar:
         _set_colorbar(multiPlot, cmap, norm = norm, ticks = cbar_ticks, symbol = cbar_max_symbol, min_max = cbar_min_max, 
                     shrinkage = cbar_shrinkage)
             
     return fig
    
 def plot_gdf_grid(gdf = None, columns = [], ncols = 2, titles = [], black_background = True, figsize = (15,15), scheme = None, bins = None, 
-                classes = None, norm = None, cmap = None, color = None, alpha = None, legend = False, single_legend = True, cbar = False, 
+                classes = None, norm = None, cmap = None, color = None, alpha = None, legend = False, cbar = False, 
                 cbar_ticks = 5, cbar_max_symbol = False, cbar_min_max = False, cbar_shrinkage = 0.75, axes_frame = False, geometry_size = None, 
                 geometry_size_columns = [], geometry_size_factor = None): 
     """
@@ -462,17 +437,18 @@ def plot_gdf_grid(gdf = None, columns = [], ncols = 2, titles = [], black_backgr
     cbar_max_symbol: boolean
         if True, it shows the ">" next to the highest tick's label in the colorbar (useful when normalising)
     cbar_min_max: boolean
-        if True, it only shows the ">" and "<" as labels of the lowest and highest ticks' the colorbar
+        if True, it only shows the labels of the lowest and highest ticks of the colorbar
+    cbar_shrink: float
+        fraction by which to multiply the size of the colorbar
     axes_frame: boolean
         if True, it shows the axes' frame
     geometry_size: float
-        point size value, when plotting a Point GeoDataFrame
-    geometry_size_factor: float 
-        when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the marker 
-        size accordingly 
-        (e.g. rescaled variable's value [0-1] * factor), when plotting a Point GeoDataFrame
-    geometry_size: float
-        line width, when plotting a LineString GeoDataFrame
+        markersize, when plotting a Point GeoDataFrame or linewidth when plotting a LineString GeoDataFrame
+    geometry_size_columns: List 
+        List of the name of the columnn, if any, of the passed GeoDataFrames whose values are to regulate the size of the geometries
+    geometry_size_factor: float
+        to control to what extent the values of the geometry_size_column impact the geometry_size
+        For a Point GeoDataFrame, it rescales the geometry_size_column provided from 0 to 1 and applies the factor (e.g. rescaled variable's value [0-1] * factor).
     geometry_size_factor: float
         when provided, it rescales the column provided, if any, from 0 to 1 and it uses the geometry_size_factor to rescale the line 
         width accordingly 
@@ -490,8 +466,8 @@ def plot_gdf_grid(gdf = None, columns = [], ncols = 2, titles = [], black_backgr
             
     multiPlot = MultiPlot(figsize = figsize, nrows = nrows, ncols = ncols, black_background = black_background)
     fig, grid = multiPlot.fig, multiPlot.grid   
-    legend_fig, legend_ax = False, False
     
+    legend_ax = False
     if cbar:
         legend = False
         if norm is None:
@@ -513,30 +489,22 @@ def plot_gdf_grid(gdf = None, columns = [], ncols = 2, titles = [], black_backgr
         
         column = columns[n]
         if len(titles) > 0:          
-            ax.set_title(titles[n], loc='center', fontfamily = 'Times New Roman', fontsize = multiPlot.font_size_secondary, color = multiPlot.text_color, 
-            pad = 15)
-        
-        if (n == ncols*nrows/2) & legend & single_legend:
-            legend_ax = True
-            legend_fig = True
-        elif legend & (not single_legend):
-            legend_ax = True
-         
+            ax.set_title(titles[n],loc='center', fontfamily = 'Times New Roman', fontsize = multiPlot.font_size_primary, color = multiPlot.text_color, pad = 15)
+                
         geometry_size_column = column
         if geometry_size_columns != []:
             geometry_size_column = geometry_size_columns[n]
-       
+        if (legend) & (ax == axes[-1]):
+            legend_ax = True
+        
         _single_plot(ax, gdf, column = column, scheme = scheme, bins = bins, classes = classes, norm = norm, cmap = cmap, color = color, 
                     alpha = alpha, legend = legend_ax, geometry_size = geometry_size, geometry_size_column = geometry_size_column, 
                     geometry_size_factor = geometry_size_factor)
-                            
-        if legend_fig:
-            _generate_legend_fig(multiPlot, ax, black_background)
-        elif legend_ax:
-            _generate_legend_ax(multiPlot, ax, black_background)
-
-    if cbar:   
-        _set_colorbar(plot = multiPlot, cmap = cmap, norm = norm, ticks = cbar_ticks, symbol = cbar_max_symbol, min_max = cbar_min_max, 
+        
+    if legend:
+        _generate_legend(multiPlot, ax, black_background)
+    elif cbar:   
+        _generate_colorbar(plot = multiPlot, cmap = cmap, norm = norm, ticks = cbar_ticks, symbol = cbar_max_symbol, min_max = cbar_min_max, 
                     shrinkage = cbar_shrinkage)
 
     return fig
@@ -552,6 +520,7 @@ def _plot_baseMap(gdf = None, ax = None, color = None, geometry_size = None, alp
     
 
 def plot_multiplex(M, multiplex_edges):
+
     node_Xs = [float(node["x"]) for node in M.nodes.values()]
     node_Ys = [float(node["y"]) for node in M.nodes.values()]
     node_Zs = np.array([float(node["z"])*2000 for node in M.nodes.values()])
@@ -611,7 +580,7 @@ def plot_multiplex(M, multiplex_edges):
 
     return(fig)
        
-def _generate_legend_fig(plot, ax, black_background):
+def _generate_legend(plot, ax, black_background):
     """ 
     It generate the legend for a figure.
     
@@ -649,51 +618,9 @@ def _generate_legend_fig(plot, ax, black_background):
         final_legend.get_frame().set_alpha(0.75)  
     
     leg.remove()
-    plot.fig.add_artist(final_legend)    
+    plot.fig.add_artist(final_legend)         
     
-def _generate_legend_ax(plot, ax, black_background):
-    """ 
-    It generate the legend for a figure.
-    
-    Parameters
-    ----------
-    ax: matplotlib.axes object
-        the Axes on which plotting
-    text_color: string
-        the text color
-    font_size: int
-        the legend's labels text size
-    """
-    leg = ax.get_legend()
-    for handle in leg.legendHandles:   
-        if not isinstance(handle, mpl.lines.Line2D):
-            handle._legmarker.set_markersize(plot.fig.get_size_inches()[0]*0.90)
-  
-    final_legend = ax.legend(handles = leg.legendHandles, labels = [t.get_text() for t in leg.texts], loc = 'center right',
-                bbox_to_anchor = (1.30, 0.5))
-
-    if black_background:
-        text_color = 'black'
-    else: 
-        text_color = 'white'
-
-    plt.setp(final_legend.texts, family= 'Times New Roman', fontsize = plot.font_size_secondary, color = text_color, va = 'center')
-    final_legend.get_frame().set_linewidth(0.0) # remove legend border
-    final_legend.set_zorder(102)
-    
-    if not black_background:
-        final_legend.get_frame().set_facecolor('black')
-        final_legend.get_frame().set_alpha(0.90)  
-    else:
-        final_legend.get_frame().set_facecolor('white')
-        final_legend.get_frame().set_alpha(0.75)  
-    
-    leg.remove()
-    final_legend.set_zorder(102)
-    ax.add_artist(final_legend) 
-        
-    
-def _set_colorbar(plot = None, cmap = None, norm = None, ticks = 5, symbol = False, min_max = False, shrinkage = 0.95):
+def _generate_colorbar(plot = None, cmap = None, norm = None, ticks = 5, symbol = False, min_max = False, shrinkage = 0.95):
     """ 
     It plots a colorbar, given some settings.
     
@@ -739,53 +666,38 @@ def _set_colorbar(plot = None, cmap = None, norm = None, ticks = 5, symbol = Fal
         cb.ax.set_yticklabels([round(t,1) if t < norm.vmax else "> "+str(round(t,1)) for t in cb.ax.get_yticks()])
 
     plt.setp(plt.getp(cb.ax, "yticklabels"), color = plot.text_color, fontfamily = 'Times New Roman', fontsize= plot.font_size_secondary)
-             
-def normalize(n, range1, range2):
+
+def _set_axes_frame(axes_frame = False, ax = None, black_background = False, text_color = 'black'):
     """ 
-    It generate the legend for a figure.
+    It draws the axis frame.
     
     Parameters
     ----------
-    ax:
+    ax: matplotlib.axes
+        the Axes on which plotting
+    black_background: boolean
+        it indicates if the background color is black
+    text_color: string
+        the text color
+    """
+    if not axes_frame:
+        ax.set_axis_off()
+        return
+      
+    ax.xaxis.set_ticklabels([])
+    ax.yaxis.set_ticklabels([])
+    ax.tick_params(axis= 'both', which= 'both', length=0)
     
-    nrows:
-    
-    
-    Returns
-    -------
-    cmap:  matplotlib.colors.Colormap
-        the color map
-    """  
+    for spine in ax.spines:
+        ax.spines[spine].set_color(text_color)
+    if black_background: 
+        ax.set_facecolor('black')
+             
+def normalize(n, range1, range2):
+
     delta1 = range1[1] - range1[0]
     delta2 = range2[1] - range2[0]
     return (delta2 * (n - range1[0]) / delta1) + range2[0]           
-
-def random_colors_list(nlabels, vmin = 0.8, vmax = 1.0, hsv = False):
-    """ 
-    It generates a list of random HSV colors, given the number of classes, 
-    min and max values in the HSV spectrum.
-    
-    Parameters
-    ----------
-
-       
-    Returns
-    -------
-    cmap: matplotlib.colors.LinearSegmentedColormap
-        the color map
-    """
-    
-    randRGBcolors = []
-    randHSVcolors = [(np.random.uniform(low=0.0, high=0.95),
-                      np.random.uniform(low=0.4, high=0.95),
-                      np.random.uniform(low= vmin, high= vmax)) for i in range(nlabels)]
-   
-    # Convert HSV list to RGB
-    if hsv:
-        randRGBcolors = []
-        for HSVcolor in randHSVcolors: 
-            randRGBcolors.append(colorsys.hsv_to_rgb(HSVcolor[0], HSVcolor[1], HSVcolor[2]))
-    return  randHSVcolors  
             
 # Generate random colormap
 def rand_cmap(nlabels, type_color ='soft'):
@@ -849,52 +761,11 @@ def kindlmann():
             (1.0, 1.0, 1.0)]
     cmap = LinearSegmentedColormap.from_list('kindlmann', kindlmann_list)
     return cmap
-    
-def _set_axes_frame(axes_frame = False, ax = None, black_background = False, text_color = 'black'):
-    """ 
-    It draws the axis frame.
-    
-    Parameters
-    ----------
-    ax: matplotlib.axes
-        the Axes on which plotting
-    black_background: boolean
-        it indicates if the background color is black
-    text_color: string
-        the text color
-    """
-    if not axes_frame:
-        ax.set_axis_off()
-        return
-      
-    ax.xaxis.set_ticklabels([])
-    ax.yaxis.set_ticklabels([])
-    ax.tick_params(axis= 'both', which= 'both', length=0)
-    
-    for spine in ax.spines:
-        ax.spines[spine].set_color(text_color)
-    if black_background: 
-        ax.set_facecolor('black')
-      
-def cmap_from_colors(list_colors):
-    """ 
-    It generates a colormap given a list of colors.
-    
-    Parameters
-    ----------
-    list_colors: list of string
-        the list of colours
-       
-    Returns
-    -------
-    cmap:  matplotlib.colors.LinearSegmentedColormap
-        the color map
-    """   
-    cmap = LinearSegmentedColormap.from_list('custom_cmap', list_colors)
-    return cmap
-    
+              
 def lighten_color(color, amount=0.5):
     """
+    This function can be found here https://gist.github.com/ihincks/6a420b599f43fcd7dbd79d56798c4e5a, author: Ian Hincks.
+    
     Lightens the given color by multiplying (1-luminosity) by the given amount.
     Input can be matplotlib color string, hex string, or RGB tuple.
 
@@ -903,13 +774,13 @@ def lighten_color(color, amount=0.5):
     >> lighten_color('#F034A3', 0.6)
     >> lighten_color((.3,.55,.1), 0.5)
     """
-    import matplotlib.colors as mc
-    import colorsys
+
     try:
-        c = mc.cnames[color]
+        c = cols.cnames[color]
     except:
         c = color
-    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    
+    c = colorsys.rgb_to_hls(*cols.to_rgb(c))
     return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
     
 def scaling_columnDF(df, column, inverse = False):
